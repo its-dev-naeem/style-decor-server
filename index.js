@@ -5,6 +5,8 @@ const { MongoClient, ServerApiVersion } = require("mongodb");
 const admin = require("firebase-admin");
 const port = process.env.PORT || 3000;
 const { ObjectId } = require("mongodb");
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, "base64").toString(
   "utf-8"
 );
@@ -52,6 +54,7 @@ async function run() {
   try {
     const db = client.db("StyleDecorDB");
     const serviceCollection = db.collection("Services");
+    const BookingCollection = db.collection("Bookings");
 
     //Post one service data
     app.post("/services", async (req, res) => {
@@ -74,6 +77,32 @@ async function run() {
       res.send(result);
     });
 
+
+
+    //user booking data post
+    app.post("/booking-data", async (req, res) => {
+      const bookingData = req.body;
+      console.log(bookingData);
+      const result = await BookingCollection.insertOne(bookingData);
+      res.send(result);
+    });
+    app.get("/booking-data", async (req, res) => {
+      const result = await BookingCollection.find().toArray();
+      res.send(result);
+    });
+
+    //user booking data api
+    app.get("/booking-data/:id", async (req, res) => {
+      try {
+        const uid = req.params.id;
+        const result = await BookingCollection.find({"uid": uid}).toArray()
+        res.status(200).send(result);
+      } catch (error) {
+        console.log("DB Error:", error);
+        res.status(500).json({ error: "Server error" });
+      }
+    });
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
@@ -92,28 +121,3 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
-
-// const uri = "mongodb+srv://its_dev_naeem:@its_dev_naeem@@styledecor.9ax377k.mongodb.net/?appName=StyleDecor";
-
-// // Create a MongoClient with a MongoClientOptions object to set the Stable API version
-// const client = new MongoClient(uri, {
-//   serverApi: {
-//     version: ServerApiVersion.v1,
-//     strict: true,
-//     deprecationErrors: true,
-//   }
-// });
-
-// async function run() {
-//   try {
-//     // Connect the client to the server	(optional starting in v4.7)
-//     await client.connect();
-//     // Send a ping to confirm a successful connection
-//     await client.db("admin").command({ ping: 1 });
-//     console.log("Pinged your deployment. You successfully connected to MongoDB!");
-//   } finally {
-//     // Ensures that the client will close when you finish/error
-//     await client.close();
-//   }
-// }
-// run().catch(console.dir);
