@@ -78,6 +78,37 @@ async function run() {
     });
 
 
+    app.post("/create-checkout-session", async (req, res) => {
+      const paymentInfo = req.body
+      console.log(paymentInfo)
+      const session = await stripe.checkout.sessions.create({
+        line_items: [
+          {
+            price_data: {
+              currency: "bdt",
+              product_data: {
+                name: paymentInfo.service.name,
+                images: [paymentInfo?.service?.image],
+                description: paymentInfo?.service?.description? paymentInfo?.service?.description : 'No description available...!',
+              },
+              unit_amount: paymentInfo.totalPrice*100,
+            },
+            quantity: 1,
+          },
+        ],
+        customer_email: paymentInfo?.user?.email,
+        mode: "payment",
+        metadata: {
+          serviceId: paymentInfo?.service?.id,
+          customer: paymentInfo?.user?.name,
+        },
+        success_url: `${process.env.SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.SITE_DOMAIN}/dashboard/bookings`,
+      });
+      res.send({ url: session.url });
+    });
+
+
 
     //user booking data post
     app.post("/booking-data", async (req, res) => {
@@ -95,11 +126,22 @@ async function run() {
     app.get("/booking-data/:id", async (req, res) => {
       try {
         const uid = req.params.id;
-        const result = await BookingCollection.find({"uid": uid}).toArray()
+        const result = await BookingCollection.find({ uid: uid }).toArray();
         res.status(200).send(result);
       } catch (error) {
         console.log("DB Error:", error);
         res.status(500).json({ error: "Server error" });
+      }
+    });
+    // user booked data delete
+    app.delete("/booking-data/:id", async (req, res) => {
+      try {
+        const uid = req.params.id;
+        console.log(uid);
+        const result = await BookingCollection.deleteOne({ _id: new ObjectId(uid) });
+        res.send(result)
+      } catch (error) {
+        console.log("DB Delete Error:", error);
       }
     });
 
