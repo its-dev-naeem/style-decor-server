@@ -55,6 +55,7 @@ async function run() {
     const db = client.db("StyleDecorDB");
     const serviceCollection = db.collection("Services");
     const BookingCollection = db.collection("Bookings");
+    const paymentCollection = db.collection("Payments");
 
     //Post one service data
     app.post("/services", async (req, res) => {
@@ -77,10 +78,9 @@ async function run() {
       res.send(result);
     });
 
-
     app.post("/create-checkout-session", async (req, res) => {
-      const paymentInfo = req.body
-      console.log(paymentInfo)
+      const paymentInfo = req.body;
+      // console.log(paymentInfo)
       const session = await stripe.checkout.sessions.create({
         line_items: [
           {
@@ -89,9 +89,11 @@ async function run() {
               product_data: {
                 name: paymentInfo.service.name,
                 images: [paymentInfo?.service?.image],
-                description: paymentInfo?.service?.description? paymentInfo?.service?.description : 'No description available...!',
+                description: paymentInfo?.service?.description
+                  ? paymentInfo?.service?.description
+                  : "No description available...!",
               },
-              unit_amount: paymentInfo.totalPrice*100,
+              unit_amount: paymentInfo.totalPrice * 100,
             },
             quantity: 1,
           },
@@ -101,6 +103,7 @@ async function run() {
         metadata: {
           serviceId: paymentInfo?.service?.id,
           customer: paymentInfo?.user?.name,
+          city: paymentInfo?.location || "Dhaka",
         },
         success_url: `${process.env.SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/bookings`,
@@ -108,12 +111,60 @@ async function run() {
       res.send({ url: session.url });
     });
 
+    app.post("/payment-success", async (req, res) => {
+      const { sessionId } = req.body;
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      // console.log(session);
+      const service = await BookingCollection.findOne({
+        "service.id": session.metadata.serviceId,
+      });
+      console.log(service);
+      const bookings = await paymentCollection.findOne({
+        transactionId: session.payment_intent,
+      });
+      // console.log(bookings);
+      if (session.status === "complete" && service && !bookings) {
+        // save order data in db
+        const paymentData = {
+          serviceId: session.metadata.serviceId,
+          transactionId: session.payment_intent,
+          customer: session.metadata.customer,
+          status: "paid",
+          userName: service.user.name,
+          userEmail: service.user.email,
+          providerName: service.provider.name,
+          providerEmail: service.provider.email,
+          serviceName: service.service.name,
+          category: service.service.caterory,
+          unit: service.service.unit,
+          image: service.service.image,
+          quantity: 1,
+          price: session.amount_total / 100,
+          location: session.metadata.city,
+        };
+        // console.log(paymentData);
+        const result = await paymentCollection.insertOne(paymentData);
+        await BookingCollection.updateOne(
+          {
+            "service.id": session.metadata.serviceId,
+          },
+          { $set: { "service.status": "Paid" } }
+        );
 
+        return res.send({
+          transactionId: session.payment_intent,
+          orderId: result.insertedId,
+        });
+        // console.log(result);
+      }
+    });
+
+  
 
     //user booking data post
     app.post("/booking-data", async (req, res) => {
       const bookingData = req.body;
-      console.log(bookingData);
+      // console.log(bookingData);
       const result = await BookingCollection.insertOne(bookingData);
       res.send(result);
     });
@@ -137,9 +188,11 @@ async function run() {
     app.delete("/booking-data/:id", async (req, res) => {
       try {
         const uid = req.params.id;
-        console.log(uid);
-        const result = await BookingCollection.deleteOne({ _id: new ObjectId(uid) });
-        res.send(result)
+        // console.log(uid);
+        const result = await BookingCollection.deleteOne({
+          _id: new ObjectId(uid),
+        });
+        res.send(result);
       } catch (error) {
         console.log("DB Delete Error:", error);
       }
