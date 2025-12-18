@@ -71,16 +71,33 @@ async function run() {
     });
 
     //get one service data
-
     app.get("/services/:id", async (req, res) => {
       const id = req.params.id;
       const result = await serviceCollection.findOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
+    // Update service by id
+    app.put("/services/:id", async (req, res) => {
+      const result = await serviceCollection.updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: req.body }
+      );
+      res.json(result);
+    });
+
+    // delete service by id
+    app.delete("/services/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await serviceCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+      res.json(result);
+    });
+
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
-      // console.log(paymentInfo)
+      console.log(paymentInfo._id);
       const session = await stripe.checkout.sessions.create({
         line_items: [
           {
@@ -101,7 +118,8 @@ async function run() {
         customer_email: paymentInfo?.user?.email,
         mode: "payment",
         metadata: {
-          serviceId: paymentInfo?.service?.id,
+          serviceId: paymentInfo?.service.id,
+          payId: paymentInfo?._id,
           customer: paymentInfo?.user?.name,
           city: paymentInfo?.location || "Dhaka",
         },
@@ -118,11 +136,12 @@ async function run() {
       const service = await BookingCollection.findOne({
         "service.id": session.metadata.serviceId,
       });
-      console.log(service);
+      // console.log(service);
       const bookings = await paymentCollection.findOne({
         transactionId: session.payment_intent,
       });
-      // console.log(bookings);
+      console.log(session.metadata.serviceId);
+
       if (session.status === "complete" && service && !bookings) {
         // save order data in db
         const paymentData = {
@@ -130,8 +149,8 @@ async function run() {
           transactionId: session.payment_intent,
           customer: session.metadata.customer,
           status: "paid",
-          userName: service.user.name,
-          userEmail: service.user.email,
+          userName: session.metadata.customer,
+          userEmail: session.customer_email,
           providerName: service.provider.name,
           providerEmail: service.provider.email,
           serviceName: service.service.name,
@@ -141,13 +160,13 @@ async function run() {
           quantity: 1,
           price: session.amount_total / 100,
           location: session.metadata.city,
+          decoretorName: null,
+          decoretorEmail: null,
         };
         // console.log(paymentData);
         const result = await paymentCollection.insertOne(paymentData);
         await BookingCollection.updateOne(
-          {
-            "service.id": session.metadata.serviceId,
-          },
+          { _id: new ObjectId(session.metadata.payId) },
           { $set: { "service.status": "Paid" } }
         );
 
@@ -159,7 +178,20 @@ async function run() {
       }
     });
 
-  
+    // get all payments for a customer by email
+    app.get("/payments", async (req, res) => {
+      const result = await paymentCollection.find().toArray();
+      res.send(result);
+    });
+    // get all payments for a customer by email
+    app.get("/my-payments/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await paymentCollection
+        .find({ userEmail: email })
+        .toArray();
+      res.send(result);
+      // console.log(email);
+    });
 
     //user booking data post
     app.post("/booking-data", async (req, res) => {
