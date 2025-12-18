@@ -56,6 +56,7 @@ async function run() {
     const serviceCollection = db.collection("Services");
     const BookingCollection = db.collection("Bookings");
     const paymentCollection = db.collection("Payments");
+    const usersCollection = db.collection("Users");
 
     //Post one service data
     app.post("/services", async (req, res) => {
@@ -95,6 +96,7 @@ async function run() {
       res.json(result);
     });
 
+    //checkout payment
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
       console.log(paymentInfo._id);
@@ -129,6 +131,7 @@ async function run() {
       res.send({ url: session.url });
     });
 
+    //payment success
     app.post("/payment-success", async (req, res) => {
       const { sessionId } = req.body;
       const session = await stripe.checkout.sessions.retrieve(sessionId);
@@ -200,12 +203,13 @@ async function run() {
       const result = await BookingCollection.insertOne(bookingData);
       res.send(result);
     });
+    //get user booking data all for admin
     app.get("/booking-data", async (req, res) => {
       const result = await BookingCollection.find().toArray();
       res.send(result);
     });
 
-    //user booking data api
+    //user booking data for user
     app.get("/booking-data/:id", async (req, res) => {
       try {
         const uid = req.params.id;
@@ -229,6 +233,44 @@ async function run() {
         console.log("DB Delete Error:", error);
       }
     });
+
+    //create a users account 
+    app.post("/user", async (req, res) => {
+      const userData = {
+        ...req.body,
+        last_loggedIn: new Date().toISOString(),
+      };
+
+      const result = await usersCollection.updateOne(
+        { email: userData.email },
+        {
+          $set: { last_loggedIn: userData.last_loggedIn },
+          $setOnInsert: {
+            ...userData,
+            created_at: new Date().toISOString(),
+            role: "user",
+          },
+        },
+        { upsert: true }
+      );
+
+      res.send(result);
+    });
+
+    // get a user's role by email
+    app.get("/user/role/:email", async (req, res) => {
+      const email = req.params.email;
+      const result = await usersCollection.findOne({ email });
+      res.send(result);
+    });
+
+    //get all users
+    app.get("/all-users", async (req, res) => {
+      const result = await usersCollection.find().toArray();
+      res.send(result);
+    });
+
+    ////////////////////////
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
