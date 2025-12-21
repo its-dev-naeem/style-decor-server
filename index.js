@@ -181,7 +181,7 @@ async function run() {
       }
     });
 
-    // get all payments for a customer by email
+    // get all payments 
     app.get("/payments", async (req, res) => {
       const result = await paymentCollection.find().toArray();
       res.send(result);
@@ -234,27 +234,33 @@ async function run() {
       }
     });
 
-    //create a users account 
+    //create a users account
     app.post("/user", async (req, res) => {
-      const userData = {
-        ...req.body,
-        last_loggedIn: new Date().toISOString(),
-      };
+      try {
+        const { role, ...rest } = req.body;
 
-      const result = await usersCollection.updateOne(
-        { email: userData.email },
-        {
-          $set: { last_loggedIn: userData.last_loggedIn },
-          $setOnInsert: {
-            ...userData,
-            created_at: new Date().toISOString(),
-            role: "user",
+        const userData = {
+          ...rest,
+          last_loggedIn: new Date().toISOString(),
+        };
+
+        const result = await usersCollection.updateOne(
+          { email: userData.email },
+          {
+            $set: userData, 
+            $setOnInsert: {
+              created_at: new Date().toISOString(),
+              role: "user", 
+            },
           },
-        },
-        { upsert: true }
-      );
+          { upsert: true }
+        );
 
-      res.send(result);
+        res.send(result);
+      } catch (error) {
+        console.error("Error in /user:", error);
+        res.status(500).send({ message: "Internal Server Error", error });
+      }
     });
 
     // get a user's role by email
@@ -270,8 +276,24 @@ async function run() {
       res.send(result);
     });
 
-    ////////////////////////
+    //update roll by id
+    app.put("/update-role/:id", async (req, res) => {
+      const id = req.params.id;
+      const { role } = req.body;
+      const result = await usersCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { role } }
+      );
+      console.log(id, role);
+      res.send(result);
+    });
 
+    //Get all decorator 
+    app.get("/decorators", async(req, res) =>{
+      const result = await usersCollection.find({role: 'decorator'}).toArray()
+      res.send(result)
+    })
+    ////////////////////////
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
