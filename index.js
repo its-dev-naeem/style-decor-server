@@ -181,11 +181,32 @@ async function run() {
       }
     });
 
-    // get all payments 
+    // get all payments
     app.get("/payments", async (req, res) => {
       const result = await paymentCollection.find().toArray();
       res.send(result);
     });
+    // add decorator for paid service
+    app.patch("/add-decorator/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const data = req.body;
+        const result = await paymentCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              decoretorEmail: data.decoretorEmail,
+              decoretorName: data.decoretorName,
+            },
+          }
+        );
+        res.send(result);
+      } catch (error) {
+        console.error("Error in /add-decorator:", error);
+        res.status(500).send({ message: "Internal Server Error", error });
+      }
+    });
+
     // get all payments for a customer by email
     app.get("/my-payments/:email", async (req, res) => {
       const email = req.params.email;
@@ -247,10 +268,10 @@ async function run() {
         const result = await usersCollection.updateOne(
           { email: userData.email },
           {
-            $set: userData, 
+            $set: userData,
             $setOnInsert: {
               created_at: new Date().toISOString(),
-              role: "user", 
+              role: "user",
             },
           },
           { upsert: true }
@@ -288,11 +309,13 @@ async function run() {
       res.send(result);
     });
 
-    //Get all decorator 
-    app.get("/decorators", async(req, res) =>{
-      const result = await usersCollection.find({role: 'decorator'}).toArray()
-      res.send(result)
-    })
+    //Get all decorator
+    app.get("/decorators", async (req, res) => {
+      const result = await usersCollection
+        .find({ role: "decorator" })
+        .toArray();
+      res.send(result);
+    });
     ////////////////////////
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
