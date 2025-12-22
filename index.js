@@ -57,11 +57,12 @@ async function run() {
     const BookingCollection = db.collection("Bookings");
     const paymentCollection = db.collection("Payments");
     const usersCollection = db.collection("Users");
+    const requestCollection = db.collection("Requests");
 
     //Post one service data
     app.post("/services", async (req, res) => {
       const servicesData = req.body;
-      console.log(servicesData);
+      // console.log(servicesData);
       const result = await serviceCollection.insertOne(servicesData);
       res.send(result);
     });
@@ -99,7 +100,7 @@ async function run() {
     //checkout payment
     app.post("/create-checkout-session", async (req, res) => {
       const paymentInfo = req.body;
-      console.log(paymentInfo._id);
+      // console.log(paymentInfo._id);
       const session = await stripe.checkout.sessions.create({
         line_items: [
           {
@@ -124,6 +125,8 @@ async function run() {
           payId: paymentInfo?._id,
           customer: paymentInfo?.user?.name,
           city: paymentInfo?.location || "Dhaka",
+          workStatus: paymentInfo?.workStatus,
+          deliveryTime: paymentInfo?.deliveryTime,
         },
         success_url: `${process.env.SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${process.env.SITE_DOMAIN}/dashboard/bookings`,
@@ -160,6 +163,8 @@ async function run() {
           category: service.service.caterory,
           unit: service.service.unit,
           image: service.service.image,
+          deliveryTime: session.metadata.deliveryTime,
+          workStatus: session.metadata.workStatus,
           quantity: 1,
           price: session.amount_total / 100,
           location: session.metadata.city,
@@ -186,6 +191,35 @@ async function run() {
       const result = await paymentCollection.find().toArray();
       res.send(result);
     });
+
+    //all payment by decorator email
+    app.get("/payment/decorator/:email", async (req, res) => {
+      // const email = 'mijan@gmail.com'
+      const email = req.params.email;
+      // console.log(email);
+      const result = await paymentCollection
+        .find({ decoretorEmail: email })
+        .toArray();
+      res.send(result);
+    });
+
+    //decorator update work status 
+    app.patch("/decorator-update/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { workStatus } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: { workStatus: workStatus },
+        };
+        const result = await paymentCollection.updateOne(query, updateDoc);
+        res.send(result);
+      } catch (error) {
+        console.error("Error updating decorator:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
     // add decorator for paid service
     app.patch("/add-decorator/:id", async (req, res) => {
       try {
@@ -241,6 +275,7 @@ async function run() {
         res.status(500).json({ error: "Server error" });
       }
     });
+
     // user booked data delete
     app.delete("/booking-data/:id", async (req, res) => {
       try {
@@ -297,16 +332,32 @@ async function run() {
       res.send(result);
     });
 
-    //update roll by id
-    app.put("/update-role/:id", async (req, res) => {
-      const id = req.params.id;
+    //update roll by email
+    app.put("/update-role/:email", async (req, res) => {
+      const email = req.params.email;
+      // console.log(email);
       const { role } = req.body;
+      // console.log(role);
       const result = await usersCollection.updateOne(
-        { _id: new ObjectId(id) },
+        { email: email },
         { $set: { role } }
       );
-      console.log(id, role);
+      console.log(role);
       res.send(result);
+    });
+
+    //delete decorater role change request
+    app.delete("/delete-request/:id", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const result = await requestCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
+        res.send(result);
+      } catch (error) {
+        console.error("Error in /delete-role:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     });
 
     //Get all decorator
@@ -314,6 +365,30 @@ async function run() {
       const result = await usersCollection
         .find({ role: "decorator" })
         .toArray();
+      res.send(result);
+    });
+
+    // post user request for decorator
+    app.post("/requests", async (req, res) => {
+      try {
+        const data = req.body;
+        const exists = await requestCollection.findOne({ email: data.email });
+        if (exists) {
+          console.log("data available");
+          res.send({ message: "Already exists" });
+        } else {
+          const result = await requestCollection.insertOne(data);
+          res.send(result);
+        }
+      } catch (error) {
+        console.error("Error in /requests:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    });
+
+    //get all user user request
+    app.get("/requests", async (req, res) => {
+      const result = await requestCollection.find().toArray();
       res.send(result);
     });
     ////////////////////////
